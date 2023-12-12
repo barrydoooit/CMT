@@ -34,8 +34,22 @@ declare -a cameras=("CAM_BACK" "CAM_BACK_LEFT" "CAM_BACK_RIGHT" "CAM_FRONT" "CAM
 # Parse arguments
 while [[ "$#" -gt 0 ]]; do
     case $1 in
-        --cam) cam_type="$2"; shift; cam_severity="$1"; [ "$cam_severity" != "clear" ] && shift ;;
-        --lidar) lidar_type="$2"; shift; lidar_severity="$1"; [ "$lidar_severity" != "clear" ] && shift ;;
+        --cam) 
+            cam_type="$2"; 
+            shift; 
+            if [ "$2" != "--lidar" ]; then
+                cam_severity="$2"; 
+                shift; 
+            fi
+        ;;
+        --lidar) 
+            lidar_type="$2"; 
+            shift; 
+            if [ "$2" ]; then
+                lidar_severity="$2"; 
+                shift; 
+            fi
+        ;;
         *) echo "Unknown parameter: $1"; exit 1 ;;
     esac
     shift
@@ -63,6 +77,4 @@ if [ ! -z "$lidar_type" ]; then
     fi
     target_lidar_path="${nuscenes_target_root}/LIDAR_TOP"
     create_link "$lidar_path" "$target_lidar_path"
-fi
-
 list_contents "$nuscenes_target_root"
