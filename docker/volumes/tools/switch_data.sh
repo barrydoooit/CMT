@@ -77,4 +77,6 @@ if [ ! -z "$lidar_type" ]; then
     fi
     target_lidar_path="${nuscenes_target_root}/LIDAR_TOP"
     create_link "$lidar_path" "$target_lidar_path"
+fi
+
 list_contents "$nuscenes_target_root"
