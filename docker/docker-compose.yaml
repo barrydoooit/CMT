@@ -1,0 +1,16 @@
+version: '3'
+services:
+  cmt_val:
+    container_name: cmt_val
+    image: 05a0cf4cd4bc
+    ipc: host
+    command: /bin/bash
+    stdin_open: true 
+    tty: true
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              capabilities: [gpu]
+

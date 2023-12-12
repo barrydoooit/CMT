@@ -1,0 +1,5 @@
+version: '3'
+services:
+  cmt_val:
+    volumes:
+      - /data/datasets/3d_obj_det/Nuscenes_mini:${PROJECT_ROOT}/data/nuscenes

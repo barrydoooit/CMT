@@ -1,0 +1,20 @@
+version: '3'
+services:
+  cmt_val:
+    volumes:
+      - ${NUSCENE_ROOT}/maps:${PROJECT_ROOT}/data/nuscenes/maps
+      - ${NUSCENE_ROOT}/nuscenes_gt_database:${PROJECT_ROOT}/data/nuscenes/nuscenes_gt_database
+      - ${NUSCENE_ROOT}/v1.0-trainval:${PROJECT_ROOT}/data/nuscenes/v1.0-trainval
+      - ${NUSCENE_ROOT}/nuscenes_dbinfos_train.pkl:${PROJECT_ROOT}/data/nuscenes/nuscenes_dbinfos_train.pkl
+      - ${NUSCENE_ROOT}/nuscenes_infos_val.pkl:${PROJECT_ROOT}/data/nuscenes/nuscenes_infos_val.pkl
+
+      - ${NUSCENE_ROOT}/samples/RADAR_BACK_LEFT:${PROJECT_ROOT}/data/nuscenes/samples/RADAR_BACK_LEFT
+      - ${NUSCENE_ROOT}/samples/RADAR_BACK_RIGHT:${PROJECT_ROOT}/data/nuscenes/samples/RADAR_BACK_RIGHT
+      - ${NUSCENE_ROOT}/samples/RADAR_FRONT:${PROJECT_ROOT}/data/nuscenes/samples/RADAR_FRONT
+      - ${NUSCENE_ROOT}/samples/RADAR_FRONT_LEFT:${PROJECT_ROOT}/data/nuscenes/samples/RADAR_FRONT_LEFT
+      - ${NUSCENE_ROOT}/samples/RADAR_FRONT_RIGHT:${PROJECT_ROOT}/data/nuscenes/samples/RADAR_FRONT_RIGHT
+
+      - ${NUSCENE_ROOT}/sweeps:${PROJECT_ROOT}/data/nuscenes/sweeps
+
+      - ${NUSCENE_L_ROOT}:${PROJECT_ROOT}/data/nuScenes-CL
+      - ${NUSCENE_C_ROOT}:${PROJECT_ROOT}/data/nuScenes-CC
