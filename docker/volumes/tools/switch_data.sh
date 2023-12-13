@@ -60,6 +60,8 @@ if [ ! -z "$cam_type" ]; then
     for cam in "${cameras[@]}"; do
         if [ "$cam_type" = "clear" ]; then
             cam_path="${nuscenes_cc_root}/clear/samples/${cam}"
+        elif [ "$cam_type" = "pure_noise" ]; then
+            cam_path="${nuscenes_cc_root}/pure_noise/samples/${cam}"
         else
             cam_path="${nuscenes_cc_root}/${cam_type}/${cam_severity}/samples/${cam}"
         fi
