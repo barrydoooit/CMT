@@ -23,12 +23,14 @@ from mmdet3d.models.detectors.mvx_two_stage import MVXTwoStageDetector
 from projects.mmdet3d_plugin.models.utils.grid_mask import GridMask
 from projects.mmdet3d_plugin import SPConvVoxelization
 
+from projects.utils import ModuleStartEndTimeTracker
 
 @DETECTORS.register_module()
 class CmtDetector(MVXTwoStageDetector):
 
     def __init__(self,
                  use_grid_mask=False,
+                 log=True,
                  **kwargs):
         pts_voxel_cfg = kwargs.get('pts_voxel_layer', None)
         kwargs['pts_voxel_layer'] = None
@@ -38,6 +40,8 @@ class CmtDetector(MVXTwoStageDetector):
         self.grid_mask = GridMask(True, True, rotate=1, offset=False, ratio=0.5, mode=1, prob=0.7)
         if pts_voxel_cfg:
             self.pts_voxel_layer = SPConvVoxelization(**pts_voxel_cfg)
+        
+        self.module_time_tracker = ModuleStartEndTimeTracker('/workspace/work_dirs/temp/time_r50_fusion.json')
 
     def init_weights(self):
         """Initialize model weights."""
@@ -46,6 +50,7 @@ class CmtDetector(MVXTwoStageDetector):
     @auto_fp16(apply_to=('img'), out_fp32=True) 
     def extract_img_feat(self, img, img_metas):
         """Extract features of images."""
+        
         if self.with_img_backbone and img is not None:
             input_shape = img.shape[-2:]
             # update real input shape of each single img
@@ -59,30 +64,44 @@ class CmtDetector(MVXTwoStageDetector):
                 img = img.view(B * N, C, H, W)
             if self.use_grid_mask:
                 img = self.grid_mask(img)
+            self.module_time_tracker.register_start('img_backbone')
             img_feats = self.img_backbone(img.float())
+            ts_end_img_backbone = self.module_time_tracker.register_end('img_backbone')
             if isinstance(img_feats, dict):
                 img_feats = list(img_feats.values())
         else:
             return None
+        self.module_time_tracker.register_start('img_neck', ts_end_img_backbone)
         if self.with_img_neck:
             img_feats = self.img_neck(img_feats)
+        self.module_time_tracker.register_end('img_neck')
         return img_feats
 
     @force_fp32(apply_to=('pts', 'img_feats'))
     def extract_pts_feat(self, pts, img_feats, img_metas):
+        self.module_time_tracker.register_start('pts_voxelize')
         """Extract features of points."""
         if not self.with_pts_bbox:
             return None
         if pts is None:
             return None
         voxels, num_points, coors = self.voxelize(pts)
+        ts_end_pts_voxelize =  self.module_time_tracker.register_end('pts_voxelize')
+        self.module_time_tracker.register_start('pts_voxel_encoder', ts_end_pts_voxelize)
         voxel_features = self.pts_voxel_encoder(voxels, num_points, coors,
                                                 )
         batch_size = coors[-1, 0] + 1
+        ts_end_pts_voxel_encoder = self.module_time_tracker.register_end('pts_voxel_encoder')
+        self.module_time_tracker.register_start('pts_middle_encoder', ts_end_pts_voxel_encoder)
         x = self.pts_middle_encoder(voxel_features, coors, batch_size)
+        ts_end_pts_middle_encoder = self.module_time_tracker.register_end('pts_middle_encoder')
+        self.module_time_tracker.register_start('pts_backbone', ts_end_pts_middle_encoder)
         x = self.pts_backbone(x)
+        ts_end_pts_backbone = self.module_time_tracker.register_end('pts_backbone')
+        self.module_time_tracker.register_start('pts_neck', ts_end_pts_backbone)
         if self.with_pts_neck:
             x = self.pts_neck(x)
+        self.module_time_tracker.register_end('pts_neck')
         return x
 
     @torch.no_grad()
@@ -231,6 +250,8 @@ class CmtDetector(MVXTwoStageDetector):
         return bbox_results
 
     def simple_test(self, points, img_metas, img=None, rescale=False):
+        ts_start_total = self.module_time_tracker.register_start('total')
+        self.module_time_tracker.register_start('all_feat', ts_start_total)
         img_feats, pts_feats = self.extract_feat(
             points, img=img, img_metas=img_metas)
         if pts_feats is None:
@@ -238,15 +259,25 @@ class CmtDetector(MVXTwoStageDetector):
         if img_feats is None:
             img_feats = [None]
         
+        ts_end_all_feat = self.module_time_tracker.register_end('all_feat')
+
+        ts_start_bbox_all = self.module_time_tracker.register_start('bbox_all', ts_end_all_feat)
+        self.module_time_tracker.register_start('bbox_pts', ts_start_bbox_all)
         bbox_list = [dict() for i in range(len(img_metas))]
         if (pts_feats or img_feats) and self.with_pts_bbox:
             bbox_pts = self.simple_test_pts(
                 pts_feats, img_feats, img_metas, rescale=rescale)
             for result_dict, pts_bbox in zip(bbox_list, bbox_pts):
                 result_dict['pts_bbox'] = pts_bbox
+        ts_end_bbox_pts = self.module_time_tracker.register_end('bbox_pts')
+        self.module_time_tracker.register_start('bbox_img', ts_end_bbox_pts)
         if img_feats and self.with_img_bbox:
             bbox_img = self.simple_test_img(
                 img_feats, img_metas, rescale=rescale)
             for result_dict, img_bbox in zip(bbox_list, bbox_img):
                 result_dict['img_bbox'] = img_bbox
+        ts_end_bbox_img = self.module_time_tracker.register_end('bbox_img')
+        self.module_time_tracker.register_end('bbox_all', ts_end_bbox_img) 
+        self.module_time_tracker.register_end('total', ts_end_bbox_img)
+        self.module_time_tracker.dump()
         return bbox_list
