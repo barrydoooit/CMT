@@ -79,7 +79,7 @@ class Wrapper:
 
 if __name__ == '__main__':
     wrapper = Wrapper(
-        cfg='your path to config file',
+        cfg='projects/configs/fusion/cmt_voxel0075_vov_1600x640_cbgs.py',
     )
     wrapper.test_speed(amp=False)
     

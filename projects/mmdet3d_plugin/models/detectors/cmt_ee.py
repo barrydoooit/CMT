@@ -26,15 +26,17 @@ from projects.mmdet3d_plugin import SPConvVoxelization
 from projects.utils import ModuleStartEndTimeTracker
 
 @DETECTORS.register_module()
-class CmtDetector(MVXTwoStageDetector):
+class EarlyExitCmtDetector(MVXTwoStageDetector):
 
     def __init__(self,
                  use_grid_mask=False,
                  log=True,
+                 img_frozen=False,
+                 lidar_frozen=False,
                  **kwargs):
         pts_voxel_cfg = kwargs.get('pts_voxel_layer', None)
         kwargs['pts_voxel_layer'] = None
-        super(CmtDetector, self).__init__(**kwargs)
+        super(EarlyExitCmtDetector, self).__init__(**kwargs)
         
         self.use_grid_mask = use_grid_mask
         self.grid_mask = GridMask(True, True, rotate=1, offset=False, ratio=0.5, mode=1, prob=0.7)
@@ -42,10 +44,12 @@ class CmtDetector(MVXTwoStageDetector):
             self.pts_voxel_layer = SPConvVoxelization(**pts_voxel_cfg)
         
         self.module_time_tracker = ModuleStartEndTimeTracker('/workspace/work_dirs/temp/time_vov_fusion.json', is_tracking=False)
+        if img_frozen:
+            self._freeze_image_branch()
 
     def init_weights(self):
         """Initialize model weights."""
-        super(CmtDetector, self).init_weights()
+        super(EarlyExitCmtDetector, self).init_weights()
 
     @auto_fp16(apply_to=('img'), out_fp32=True) 
     def extract_img_feat(self, img, img_metas):
@@ -281,3 +285,14 @@ class CmtDetector(MVXTwoStageDetector):
         self.module_time_tracker.register_end('total', ts_end_bbox_img)
         self.module_time_tracker.dump()
         return bbox_list
+
+    def _freeze_image_branch(self):
+        """Freeze image branch during training."""
+        if self.with_img_backbone:
+            for m in self.img_backbone.modules():
+                for param in m.parameters():
+                    param.requires_grad = False
+        if self.with_img_neck:
+            for m in self.img_neck.modules():
+                for param in m.parameters():
+                    param.requires_grad = False

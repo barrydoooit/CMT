@@ -6,13 +6,16 @@ import numpy as np
 
 
 class TimeTracker:
-    def __init__(self, output_file_path, parse_func=None, vis_func=None):
+    def __init__(self, output_file_path, parse_func=None, vis_func=None, is_tracking=False):
         self.timestamps = {}
         self.output_file_path = output_file_path
         self.parse_func = parse_func
         self.vis_func = vis_func
+        self.is_tracking = is_tracking
 
     def register(self, name):
+        if not self.is_tracking:
+            return
         self.timestamps[name] = time.time()
 
     def get_time_diff(self, start_name, end_name):
@@ -24,6 +27,8 @@ class TimeTracker:
         self.timestamps = {}
 
     def dump(self):
+        if not self.is_tracking:
+            return
         output = self.timestamps
         if self.parse_func is not None:
             output = self.parse_func(output)
@@ -33,13 +38,15 @@ class TimeTracker:
         self.reset()
 
     def __del__(self):
+        if not self.is_tracking:
+            return
         vis_func = self.vis_func
         output_file_path = self.output_file_path
         if vis_func is not None and os.path.exists(output_file_path):
             vis_func(output_file_path)
 
 class ModuleStartEndTimeTracker(TimeTracker):
-    def __init__(self, output_file_path):
+    def __init__(self, output_file_path, is_tracking=False):
         def parse_func(timestamps):
             output = {}
             for module_name, module_timestamps in timestamps.items():
@@ -113,15 +120,19 @@ class ModuleStartEndTimeTracker(TimeTracker):
                         f"{time_duration['q4-std'] * 1000:<10.2f}"
                         f"{time_duration['q4-median'] * 1000:<10.2f}\n")
                
-        super().__init__(output_file_path, parse_func, vis_func)
+        super().__init__(output_file_path, parse_func, vis_func, is_tracking)
 
     def register_start(self, module_name, ts=None):
+        if not self.is_tracking:
+            return
         module_time_dict = dict()
         module_time_dict['start'] = ts if ts is not None else time.time()
         self.timestamps[module_name] = module_time_dict
         return ts
 
     def register_end(self, module_name, ts=None):
+        if not self.is_tracking:
+            return
         if module_name not in self.timestamps:
             raise ValueError(f"Timestamps for {module_name} not registered.")
         self.timestamps[module_name]['end'] = ts if ts is not None else time.time()
