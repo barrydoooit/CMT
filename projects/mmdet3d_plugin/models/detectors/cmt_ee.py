@@ -32,7 +32,9 @@ class EarlyExitCmtDetector(MVXTwoStageDetector):
                  use_grid_mask=False,
                  log=True,
                  img_frozen=False,
-                 lidar_frozen=False,
+                 voxel_frozen=False,
+                 pts_frozen=False,
+                 bbox_head_frozen=False,
                  **kwargs):
         pts_voxel_cfg = kwargs.get('pts_voxel_layer', None)
         kwargs['pts_voxel_layer'] = None
@@ -46,6 +48,13 @@ class EarlyExitCmtDetector(MVXTwoStageDetector):
         self.module_time_tracker = ModuleStartEndTimeTracker('/workspace/work_dirs/temp/time_vov_fusion.json', is_tracking=False)
         if img_frozen:
             self._freeze_image_branch()
+        if voxel_frozen:
+            self._freeze_voxelization()
+        if pts_frozen:
+            self._freeze_pts_after_encoder()
+        if bbox_head_frozen:
+            self._freeze_pts_bbox_head()
+
 
     def init_weights(self):
         """Initialize model weights."""
@@ -296,3 +305,22 @@ class EarlyExitCmtDetector(MVXTwoStageDetector):
             for m in self.img_neck.modules():
                 for param in m.parameters():
                     param.requires_grad = False
+    
+    def _freeze_voxelization(self):
+        """Freeze voxelization during training."""
+        for p in self.pts_voxel_layer.parameters():
+            p.requires_grad = False
+        for p in self.pts_voxel_encoder.parameters():
+            p.requires_grad = False
+
+    def _freeze_pts_after_encoder(self):
+        """Freeze point cloud branch after voxel encoder during training."""
+        for p in self.pts_backbone.parameters():
+            p.requires_grad = False
+        for p in self.pts_neck.parameters():
+            p.requires_grad = False
+
+    def _freeze_pts_bbox_head(self):
+        """Freeze point cloud bbox head during training."""
+        for p in self.pts_bbox_head.parameters():
+            p.requires_grad = False

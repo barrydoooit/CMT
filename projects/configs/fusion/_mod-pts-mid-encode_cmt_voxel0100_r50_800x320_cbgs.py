@@ -45,46 +45,46 @@ train_pipeline = [
     ),
     dict(type='LoadMultiViewImageFromFiles'),
     dict(type='LoadAnnotations3D', with_bbox_3d=True, with_label_3d=True),
-    # dict(
-    #     type='UnifiedObjectSample',
-    #     sample_2d=True,
-    #     mixup_rate=0.5,
-    #     db_sampler=dict(
-    #         type='UnifiedDataBaseSampler',
-    #         data_root=data_root,
-    #         info_path=data_root + '/nuscenes_dbinfos_train.pkl',
-    #         rate=1.0,
-    #         prepare=dict(
-    #             filter_by_difficulty=[-1],
-    #             filter_by_min_points=dict(
-    #                 car=5,
-    #                 truck=5,
-    #                 bus=5,
-    #                 trailer=5,
-    #                 construction_vehicle=5,
-    #                 traffic_cone=5,
-    #                 barrier=5,
-    #                 motorcycle=5,
-    #                 bicycle=5,
-    #                 pedestrian=5)),
-    #         classes=class_names,
-    #         sample_groups=dict(
-    #             car=2,
-    #             truck=3,
-    #             construction_vehicle=7,
-    #             bus=4,
-    #             trailer=6,
-    #             barrier=2,
-    #             motorcycle=6,
-    #             bicycle=6,
-    #             pedestrian=2,
-    #             traffic_cone=2),
-    #         points_loader=dict(
-    #             type='LoadPointsFromFile',
-    #             coord_type='LIDAR',
-    #             load_dim=5,
-    #             use_dim=[0, 1, 2, 3, 4],
-    #         ))),
+    dict(
+        type='UnifiedObjectSample',
+        sample_2d=True,
+        mixup_rate=0.5,
+        db_sampler=dict(
+            type='UnifiedDataBaseSampler',
+            data_root=data_root,
+            info_path=data_root + '/nuscenes_dbinfos_train.pkl',
+            rate=1.0,
+            prepare=dict(
+                filter_by_difficulty=[-1],
+                filter_by_min_points=dict(
+                    car=5,
+                    truck=5,
+                    bus=5,
+                    trailer=5,
+                    construction_vehicle=5,
+                    traffic_cone=5,
+                    barrier=5,
+                    motorcycle=5,
+                    bicycle=5,
+                    pedestrian=5)),
+            classes=class_names,
+            sample_groups=dict(
+                car=2,
+                truck=3,
+                construction_vehicle=7,
+                bus=4,
+                trailer=6,
+                barrier=2,
+                motorcycle=6,
+                bicycle=6,
+                pedestrian=2,
+                traffic_cone=2),
+            points_loader=dict(
+                type='LoadPointsFromFile',
+                coord_type='LIDAR',
+                load_dim=5,
+                use_dim=[0, 1, 2, 3, 4],
+            ))),
     dict(type='ModalMask3D', mode='train'),
     dict(
         type='GlobalRotScaleTransAll',
@@ -188,6 +188,9 @@ model = dict(
     type='EarlyExitCmtDetector',
     use_grid_mask=True,
     img_frozen = True,
+    voxel_frozen = True,
+    pts_frozen = True,
+    bbox_head_frozen = True,
     img_backbone=dict(
         type='ResNet',
         depth=50,
@@ -336,7 +339,7 @@ model = dict(
         )))
 optimizer = dict(
     type='AdamW',
-    lr=0.00014, #base learning rate
+    lr=0.00005, #base learning rate
     paramwise_cfg=dict(
         custom_keys={
             'img_backbone': dict(lr_mult=0.01, decay_mult=5),
@@ -351,7 +354,7 @@ optimizer_config = dict(
 
 lr_config = dict(
     policy='cyclic',
-    target_ratio=(6, 0.0001),
+    target_ratio=(6, 0.01),
     cyclic_times=1,
     step_ratio_up=0.4)
 momentum_config = dict(
@@ -359,7 +362,7 @@ momentum_config = dict(
     target_ratio=(0.8947368421052632, 1),
     cyclic_times=1,
     step_ratio_up=0.4)
-total_epochs = 20
+total_epochs = 5
 checkpoint_config = dict(interval=1)
 log_config = dict(
     interval=50,

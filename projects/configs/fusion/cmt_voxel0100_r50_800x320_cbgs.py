@@ -364,7 +364,8 @@ log_config = dict(
 dist_params = dict(backend='nccl')
 log_level = 'INFO'
 work_dir = None
-load_from='work_dirs/official_pths/nuim_r50.pth'
+# load_from='work_dirs/official_pths/nuim_r50.pth'
+load_from = 'work_dirs/official_pths/voxel0100_r50_800x320_epoch20.pth'
 resume_from = None
 workflow = [('train', 1)]
 gpu_ids = range(0, 8)
