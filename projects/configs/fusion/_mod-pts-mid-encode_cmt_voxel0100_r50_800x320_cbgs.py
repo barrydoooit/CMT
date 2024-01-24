@@ -354,7 +354,7 @@ optimizer_config = dict(
 
 lr_config = dict(
     policy='cyclic',
-    target_ratio=(6, 0.01),
+    target_ratio=(3, 0.1),
     cyclic_times=1,
     step_ratio_up=0.4)
 momentum_config = dict(
@@ -362,7 +362,7 @@ momentum_config = dict(
     target_ratio=(0.8947368421052632, 1),
     cyclic_times=1,
     step_ratio_up=0.4)
-total_epochs = 5
+total_epochs = 6
 checkpoint_config = dict(interval=1)
 log_config = dict(
     interval=50,
