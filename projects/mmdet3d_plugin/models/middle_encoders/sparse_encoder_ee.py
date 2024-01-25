@@ -431,7 +431,7 @@ class EarlyExitSparseEncoder(nn.Module):
         self.test_exit_indice = test_exit_indice
         self.freeze_backbone = freeze_backbone
         self.exit_paddings = exit_paddings
-        self.train_exit_sequence = (2, 1, 3, 0)
+        self.train_exit_sequence = (3, 0, 1, 2)
         self.cur_train_exit_idx = 0
 
         assert isinstance(order, tuple) and len(order) == 3
