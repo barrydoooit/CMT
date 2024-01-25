@@ -127,9 +127,11 @@ class EarlyExitCmtDetector(MVXTwoStageDetector):
         self.module_time_tracker.register_end('pts_neck')
 
         features_out = {'student':x}
+        # if self.training:
+        #     with torch.no_grad():
+        #         features_out['teacher'] = self.extract_pts_feat_post_middle_encoder(teacher_student_features['teacher'])
+        #     return features_out
         if self.training:
-            with torch.no_grad():
-                features_out['teacher'] = self.extract_pts_feat_post_middle_encoder(teacher_student_features['teacher'])
             return features_out
         return x
 
@@ -213,9 +215,10 @@ class EarlyExitCmtDetector(MVXTwoStageDetector):
             points, img=img, img_metas=img_metas)
         
         pts_feats = pts_feats_dict['student']
-        mse_distill_loss_func = nn.MSELoss()
+        # mse_distill_loss_func = nn.MSELoss()
 
-        losses = {f"pts_distill_mse_fpn{i}": mse_distill_loss_func(pts_feats[i], pts_feats_dict['teacher'][i]) for i in range(len(pts_feats))}
+        # losses = {f"pts_distill_mse_fpn{i}": mse_distill_loss_func(pts_feats[i], pts_feats_dict['teacher'][i]) for i in range(len(pts_feats))}
+        losses = dict()
         if pts_feats or img_feats:
             losses_pts = self.forward_pts_train(pts_feats, img_feats, gt_bboxes_3d,
                                                 gt_labels_3d, img_metas,

@@ -412,7 +412,7 @@ class EarlyExitSparseEncoder(nn.Module):
                                                                  1)),
                  block_type='conv_module',
                  exit_paddings=None,
-                 exit_indice=2,
+                 exit_indice=1,
                  freeze_backbone=True):
         super().__init__()
         assert block_type in ['conv_module', 'basicblock']
@@ -483,6 +483,10 @@ class EarlyExitSparseEncoder(nn.Module):
         #                         conv_cfg=dict(type='SubMConv3d'))
         if self.freeze_backbone:
             self._freeze_encoder()
+        else:
+            for p in self.encoder_layers[self.exit_indice+1:].parameters():
+                p.requires_grad = False
+
         exit_indices_to_freeze = tuple([i for i in range(exit_indice)])
         self._freeze_encoder_exits(indices=exit_indices_to_freeze)
 

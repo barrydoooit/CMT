@@ -227,7 +227,7 @@ model = dict(
         block_type='basicblock',
         exit_paddings=(1, [0, 1, 1], 1),
         exit_indice=2,
-        freeze_backbone=True),
+        freeze_backbone=False),
     pts_backbone=dict(
         type='SECOND',
         in_channels=256,
@@ -339,7 +339,7 @@ model = dict(
         )))
 optimizer = dict(
     type='AdamW',
-    lr=0.00005, #base learning rate
+    lr=0.0001, #base learning rate
     paramwise_cfg=dict(
         custom_keys={
             'img_backbone': dict(lr_mult=0.01, decay_mult=5),
@@ -354,7 +354,7 @@ optimizer_config = dict(
 
 lr_config = dict(
     policy='cyclic',
-    target_ratio=(3, 0.1),
+    target_ratio=(2, 0.01),
     cyclic_times=1,
     step_ratio_up=0.4)
 momentum_config = dict(
