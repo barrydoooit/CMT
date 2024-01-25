@@ -150,7 +150,7 @@ test_pipeline = [
         ])
 ]
 data = dict(
-    samples_per_gpu=4,
+    samples_per_gpu=8,
     workers_per_gpu=6,
     train=dict(
         type='CBGSDataset',
@@ -226,7 +226,7 @@ model = dict(
         encoder_paddings=((0, 0, 1), (0, 0, 1), (0, 0, [0, 1, 1]), (0, 0)),
         block_type='basicblock',
         exit_paddings=(1, [0, 1, 1], 1),
-        exit_indice=2,
+        test_exit_indice=0,
         freeze_backbone=False),
     pts_backbone=dict(
         type='SECOND',
@@ -369,6 +369,7 @@ log_config = dict(
     hooks=[dict(type='TextLoggerHook'),
            dict(type='TensorboardLoggerHook')])
 dist_params = dict(backend='nccl')
+find_unused_parameters = True
 log_level = 'INFO'
 work_dir = None
 # load_from = 'work_dirs/official_pths/nuim_r50.pth'

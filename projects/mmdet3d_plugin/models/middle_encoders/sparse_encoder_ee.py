@@ -1,4 +1,5 @@
 # Copyright (c) OpenMMLab. All rights reserved.
+import random
 import torch
 from mmcv.ops import points_in_boxes_all, three_interpolate, three_nn
 from mmcv.runner import auto_fp16
@@ -412,8 +413,8 @@ class EarlyExitSparseEncoder(nn.Module):
                                                                  1)),
                  block_type='conv_module',
                  exit_paddings=None,
-                 exit_indice=1,
-                 freeze_backbone=True):
+                 test_exit_indice=1,
+                 freeze_backbone=False):
         super().__init__()
         assert block_type in ['conv_module', 'basicblock']
         self.sparse_shape = sparse_shape
@@ -427,9 +428,11 @@ class EarlyExitSparseEncoder(nn.Module):
         self.fp16_enabled = False
         # Spconv init all weight on its own
 
-        self.exit_indice = exit_indice
+        self.test_exit_indice = test_exit_indice
         self.freeze_backbone = freeze_backbone
         self.exit_paddings = exit_paddings
+        self.train_exit_sequence = (2, 1, 3, 0)
+        self.cur_train_exit_idx = 0
 
         assert isinstance(order, tuple) and len(order) == 3
         assert set(order) == {'conv', 'norm', 'act'}
@@ -483,12 +486,9 @@ class EarlyExitSparseEncoder(nn.Module):
         #                         conv_cfg=dict(type='SubMConv3d'))
         if self.freeze_backbone:
             self._freeze_encoder()
-        else:
-            for p in self.encoder_layers[self.exit_indice+1:].parameters():
-                p.requires_grad = False
 
-        exit_indices_to_freeze = tuple([i for i in range(exit_indice)])
-        self._freeze_encoder_exits(indices=exit_indices_to_freeze)
+        # exit_indices_to_freeze = tuple([i for i in range(exit_indice)])
+        # self._freeze_encoder_exits(indices=exit_indices_to_freeze)
 
     @auto_fp16(apply_to=('voxel_features', ))
     def forward(self, voxel_features, coors, batch_size):
@@ -514,33 +514,48 @@ class EarlyExitSparseEncoder(nn.Module):
         early_exit_features = []
         layer_idx = 0
 
-        exit_indice = self.exit_indice
+        exit_indice_train = self.train_exit_sequence[self.cur_train_exit_idx]
+        self.cur_train_exit_idx = (self.cur_train_exit_idx + 1) % len(self.train_exit_sequence)
+        exit_indice_test = self.test_exit_indice
 
         if self.training:
             for encoder_layer in self.encoder_layers:
-                # ts = time.time()
-                # run encoder layer with backbone frozen
-                x = encoder_layer(x) # x.dense().shape: -> [B, 32, 21, 512, 512] -> [B, 64, 11, 256, 256] -> [B, 128, 5, 128, 128] -> [B, 128, 5, 128, 128]
+                
+                if layer_idx > exit_indice_train:
+                    with torch.no_grad():
+                        x = encoder_layer(x)
+                else:
+                    x = encoder_layer(x) # x.dense().shape: -> [B, 32, 21, 512, 512] -> [B, 64, 11, 256, 256] -> [B, 128, 5, 128, 128] -> [B, 128, 5, 128, 128]
                 
                 if layer_idx < self.stage_num - 1:
                     downsampler = self.encoder_downsamplers[layer_idx]
-                    if layer_idx <= exit_indice:
+                    if layer_idx < exit_indice_train:
+                        with torch.no_grad():
+                            out = downsampler(x)
+                    elif layer_idx == exit_indice_train:
                         out = downsampler(x)
                     else:
                         out = downsampler(early_exit_features[-1])
                     early_exit_features.append(out)
                 encode_features.append(x)
                 layer_idx += 1
-            out = self.conv_out(early_exit_features[exit_indice])
+            
+            if exit_indice_train == self.stage_num - 1: # last layer
+                out = self.conv_out(encode_features[-1])
+            else:
+                out = self.conv_out(early_exit_features[-1])
         else:
             to_break = False
             for encoder_layer in self.encoder_layers:
                 x = encoder_layer(x)
-                if layer_idx == exit_indice:
+                if layer_idx == exit_indice_test:
                     to_break = True
-                    for downsampler in self.encoder_downsamplers[layer_idx]:
-                        x = downsampler(x)
+                    if exit_indice_test == self.stage_num - 1: # last layer
                         early_exit_features.append(x)
+                    else:
+                        for downsampler in self.encoder_downsamplers[layer_idx:]:
+                            x = downsampler(x)
+                            early_exit_features.append(x)
                 if to_break:
                     break    
                 layer_idx += 1
@@ -555,14 +570,14 @@ class EarlyExitSparseEncoder(nn.Module):
         spatial_features = spatial_features.view(N, C * D, H, W)
 
         features_out: dict = {'student': spatial_features}
-        if self.training:
-            # get original final spatial feature into conv_out without gradient
-            assert len(encode_features) == self.stage_num
-            with torch.no_grad():
-                teacher_out = self.conv_out(encode_features[-1])
-                spatial_features_teacher = teacher_out.dense()
-                spatial_features_teacher = spatial_features_teacher.view(N, C * D, H, W)
-            features_out['teacher'] = spatial_features_teacher
+        # if self.training:
+        #     # get original final spatial feature into conv_out without gradient
+        #     assert len(encode_features) == self.stage_num
+        #     with torch.no_grad():
+        #         teacher_out = self.conv_out(encode_features[-1])
+        #         spatial_features_teacher = teacher_out.dense()
+        #         spatial_features_teacher = spatial_features_teacher.view(N, C * D, H, W)
+        #     features_out['teacher'] = spatial_features_teacher
         return features_out
 
     def make_encoder_layers(self,
