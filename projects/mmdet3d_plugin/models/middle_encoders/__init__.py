@@ -1,3 +1,3 @@
-from .sparse_encoder_ee import EarlyExitSparseEncoder
+from .sparse_encoder_ee import EarlyExitSparseEncoder, EarlyExitSparseEncoderV2
 
-__all__ = ['EarlyExitSparseEncoder']
+__all__ = ['EarlyExitSparseEncoder', 'EarlyExitSparseEncoderV2']

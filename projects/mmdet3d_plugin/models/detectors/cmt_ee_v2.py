@@ -5,7 +5,6 @@
 # Copyright (c) OpenMMLab. All rights reserved.
 # ------------------------------------------------------------------------
 
-import json
 import mmcv
 import copy
 import torch
@@ -25,12 +24,9 @@ from projects.mmdet3d_plugin.models.utils.grid_mask import GridMask
 from projects.mmdet3d_plugin import SPConvVoxelization
 
 from projects.utils import ModuleStartEndTimeTracker
-from thop import profile
-
-
 
 @DETECTORS.register_module()
-class EarlyExitCmtDetector(MVXTwoStageDetector):
+class EarlyExitCmtDetectorV2(MVXTwoStageDetector):
 
     def __init__(self,
                  use_grid_mask=False,
@@ -42,14 +38,14 @@ class EarlyExitCmtDetector(MVXTwoStageDetector):
                  **kwargs):
         pts_voxel_cfg = kwargs.get('pts_voxel_layer', None)
         kwargs['pts_voxel_layer'] = None
-        super(EarlyExitCmtDetector, self).__init__(**kwargs)
+        super(EarlyExitCmtDetectorV2, self).__init__(**kwargs)
         
         self.use_grid_mask = use_grid_mask
         self.grid_mask = GridMask(True, True, rotate=1, offset=False, ratio=0.5, mode=1, prob=0.7)
         if pts_voxel_cfg:
             self.pts_voxel_layer = SPConvVoxelization(**pts_voxel_cfg)
         
-        # self.module_time_tracker = ModuleStartEndTimeTracker('/workspace/work_dirs/temp/time_r50_exit0_fusion.json', is_tracking=True)
+        # self.module_time_tracker = ModuleStartEndTimeTracker('/workspace/work_dirs/temp/time_vov_fusion.json', is_tracking=False)
         if img_frozen:
             self._freeze_image_branch()
         if voxel_frozen:
@@ -62,7 +58,7 @@ class EarlyExitCmtDetector(MVXTwoStageDetector):
 
     def init_weights(self):
         """Initialize model weights."""
-        super(EarlyExitCmtDetector, self).init_weights()
+        super(EarlyExitCmtDetectorV2, self).init_weights()
 
     @auto_fp16(apply_to=('img'), out_fp32=True) 
     def extract_img_feat(self, img, img_metas):
@@ -82,8 +78,6 @@ class EarlyExitCmtDetector(MVXTwoStageDetector):
             if self.use_grid_mask:
                 img = self.grid_mask(img)
             # self.module_time_tracker.register_start('img_backbone')
-            macs, params = profile(self.img_backbone, inputs=(img.float(),))
-            self.macs_dict['img_backbone'] = macs
             img_feats = self.img_backbone(img.float())
             # ts_end_img_backbone = self.module_time_tracker.register_end('img_backbone')
             if isinstance(img_feats, dict):
@@ -92,8 +86,6 @@ class EarlyExitCmtDetector(MVXTwoStageDetector):
             return None
         # self.module_time_tracker.register_start('img_neck', ts_end_img_backbone)
         if self.with_img_neck:
-            macs, params = profile(self.img_neck, inputs=(img_feats,))
-            self.macs_dict['img_neck'] = macs
             img_feats = self.img_neck(img_feats)
         # self.module_time_tracker.register_end('img_neck')
         return img_feats
@@ -106,15 +98,11 @@ class EarlyExitCmtDetector(MVXTwoStageDetector):
             return None
         if pts is None:
             return None
-        # macs, params = profile(self.pts_voxel_layer, inputs=(pts,))
-        # self.macs_dict['pts_voxel_layer'] = macs
         voxels, num_points, coors = self.voxelize(pts)
 
         # ts_end_pts_voxelize =  self.module_time_tracker.register_end('pts_voxelize')
         # self.module_time_tracker.register_start('pts_voxel_encoder', ts_end_pts_voxelize)
         ###
-        macs, params = profile(self.pts_voxel_encoder, inputs=(voxels, num_points, coors,))
-        self.macs_dict['pts_voxel_encoder'] = macs
         voxel_features = self.pts_voxel_encoder(voxels, num_points, coors,
                                                 )
         batch_size = coors[-1, 0] + 1
@@ -122,45 +110,28 @@ class EarlyExitCmtDetector(MVXTwoStageDetector):
         # ts_end_pts_voxel_encoder = self.module_time_tracker.register_end('pts_voxel_encoder')
         # self.module_time_tracker.register_start('pts_middle_encoder', ts_end_pts_voxel_encoder)
         ###
-
-        macs, params = profile(self.pts_middle_encoder, inputs=(voxel_features, coors, batch_size,))
-        self.macs_dict['pts_middle_encoder'] = macs
         teacher_student_features: dict = self.pts_middle_encoder(voxel_features, coors, batch_size)
-        x = teacher_student_features['student']
+        _x_list = teacher_student_features['student']
         
         # ts_end_pts_middle_encoder = self.module_time_tracker.register_end('pts_middle_encoder')
         # self.module_time_tracker.register_start('pts_backbone', ts_end_pts_middle_encoder)
         ###
-
-        macs, params = profile(self.pts_backbone, inputs=(x,))
-        self.macs_dict['pts_backbone'] = macs
-        x = self.pts_backbone(x)
+        _x_list = [self.pts_backbone(_x) for _x in _x_list]
 
         # ts_end_pts_backbone = self.module_time_tracker.register_end('pts_backbone')
         # self.module_time_tracker.register_start('pts_neck', ts_end_pts_backbone)
         ###
         if self.with_pts_neck:
-            macs, params = profile(self.pts_neck, inputs=(x,))
-            self.macs_dict['pts_neck'] = macs
-            x = self.pts_neck(x)
+            _x_list = [self.pts_neck(_x) for _x in _x_list]
 
         # self.module_time_tracker.register_end('pts_neck')
 
-        features_out = {'student':x}
+        features_out = {'student': _x_list}
         # if self.training:
         #     with torch.no_grad():
         #         features_out['teacher'] = self.extract_pts_feat_post_middle_encoder(teacher_student_features['teacher'])
         #     return features_out
-        if self.training:
-            return features_out
-        return x
-
-    @force_fp32(apply_to=('mid_encoded_pts_feats'))
-    def extract_pts_feat_post_middle_encoder(self, mid_encoded_pts_feats):
-        x = self.pts_backbone(mid_encoded_pts_feats)
-        if self.with_pts_neck:
-            x = self.pts_neck(x)
-        return x
+        return features_out
 
     @torch.no_grad()
     @force_fp32()
@@ -235,15 +206,19 @@ class EarlyExitCmtDetector(MVXTwoStageDetector):
             points, img=img, img_metas=img_metas)
         
         pts_feats = pts_feats_dict['student']
-        # mse_distill_loss_func = nn.MSELoss()
 
-        # losses = {f"pts_distill_mse_fpn{i}": mse_distill_loss_func(pts_feats[i], pts_feats_dict['teacher'][i]) for i in range(len(pts_feats))}
         losses = dict()
-        if pts_feats or img_feats:
-            losses_pts = self.forward_pts_train(pts_feats, img_feats, gt_bboxes_3d,
+        assert len(pts_feats) == 4 or len(pts_feats) == 1
+        losses_weight = (0.15, 0.2, 0.25, 0.3) if len(pts_feats) == 4 else (1.0,)
+        for i, pts_feat in enumerate(pts_feats):
+            losses_pts = self.forward_pts_train(pts_feat, img_feats, gt_bboxes_3d,
                                                 gt_labels_3d, img_metas,
                                                 gt_bboxes_ignore)
-            losses.update(losses_pts)
+            for k, v in losses_pts.items():
+                if k not in losses:
+                    losses[k] = v * losses_weight[i]
+                else:
+                    losses[k] += v * losses_weight[i]
         return losses
 
     @force_fp32(apply_to=('pts_feats', 'img_feats'))
@@ -295,7 +270,6 @@ class EarlyExitCmtDetector(MVXTwoStageDetector):
                 torch.Tensor should have a shape NxCxHxW, which contains
                 all images in the batch. Defaults to None.
         """
-        self.macs_dict = dict()
         if points is None:
             points = [None]
         if img is None:
@@ -310,8 +284,6 @@ class EarlyExitCmtDetector(MVXTwoStageDetector):
     @force_fp32(apply_to=('x', 'x_img'))
     def simple_test_pts(self, x, x_img, img_metas, rescale=False):
         """Test function of point cloud branch."""
-        # macs, params = profile(self.pts_bbox_head, inputs=(x, x_img, img_metas,))
-        # self.macs_dict['pts_bbox_head'] = macs
         outs = self.pts_bbox_head(x, x_img, img_metas)
         bbox_list = self.pts_bbox_head.get_bboxes(
             outs, img_metas, rescale=rescale)
@@ -352,9 +324,6 @@ class EarlyExitCmtDetector(MVXTwoStageDetector):
         # self.module_time_tracker.register_end('bbox_all', ts_end_bbox_img) 
         # self.module_time_tracker.register_end('total', ts_end_bbox_img)
         # self.module_time_tracker.dump()
-        with open('/workspace/work_dirs/temp/r50_macs.json', 'a') as f:
-            json.dump(self.macs_dict, f)
-            f.write('\n')
         return bbox_list
 
     def _freeze_image_branch(self):
